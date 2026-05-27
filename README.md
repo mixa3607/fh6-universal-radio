@@ -19,6 +19,10 @@ An open-source radio mod for **Forza Horizon 6**. Adds a new in-game radio stati
 - **YouTube Music**: paste any video, playlist, or YT Music URL from the dashboard.
 - **In-game radio integration**: audio is routed through FH6's radio bus, fades with menus and reacts to in-game volume like every other station.
 - **Live dashboard** at `http://localhost:8420`: switch source, transport controls, volume, settings.
+- **Race start action**: on race begin, advance to next track, restart the current one, or leave it alone.
+- **Quick station skip**: tune the radio knob away and back within 1s to skip the current track.
+- **Loudness normalization**: For consistent volume across tracks.
+- **5-band equalizer**: 60 Hz / 250 Hz / 1 kHz / 4 kHz / 12 kHz peaking biquads, ±6 dB per band, applied producer-side at 48 kHz before audio hits the game.
 
 ## Install
 
