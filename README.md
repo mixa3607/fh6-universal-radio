@@ -6,7 +6,7 @@
 
 <p align="center"><img src="assets/banner.png" alt="FH6 Universal Radio" /></p>
 
-An open-source radio mod for **Forza Horizon 6**. Adds a new in-game radio station fed from your **local music** or **YouTube Music**, controlled from a browser dashboard.
+An open-source radio mod for **Forza Horizon 6**. Adds a new in-game radio station fed from your **local music**, **YouTube Music**, or **Jellyfin** server, controlled from a browser dashboard.
 
 <p align="center">
   <img src="assets/ingame.png" alt="In-game radio station" width="49%" />
@@ -17,6 +17,7 @@ An open-source radio mod for **Forza Horizon 6**. Adds a new in-game radio stati
 
 - **Local files**: point it at any folder. MP3 / FLAC / WAV / OGG play out of the box; M4A / AAC / OPUS / WMA / etc. play if `ffmpeg` is installed (same binary as YouTube Music below).
 - **YouTube Music**: paste any video, playlist, or YT Music URL from the dashboard.
+- **Jellyfin**: stream playlists from your own Jellyfin server. Configure server URL, API key, and user ID under **Settings > Jellyfin**, then cast a playlist by ID from the dashboard.
 - **In-game radio integration**: audio is routed through FH6's radio bus, fades with menus and reacts to in-game volume like every other station.
 - **Live dashboard** at `http://localhost:8420`: switch source, transport controls, volume, settings.
 - **Race start action**: on race begin, advance to next track, restart the current one, or leave it alone.
@@ -69,6 +70,7 @@ Requires **Visual Studio 2022+** with the *Desktop development with C++* workloa
 | Local files don't play | No `music_dir` set, or the folder only has unsupported formats. Set one from the dashboard. |
 | `[local] failed to open ... .m4a` (or `.opus`, `.aac`, ...) | The built-in decoder handles MP3/FLAC/WAV/OGG only; other formats are routed through `ffmpeg`. Install it (`winget install Gyan.FFmpeg`) and either put it on `PATH` or set the path under **Settings > General > ffmpeg path**. |
 | YouTube Music produces no audio | Check `%TEMP%\fh6-stderr.log` (helper-process stderr lands there). Usually missing yt-dlp/ffmpeg, expired cookies, or geo/format restrictions. |
+| Jellyfin cast returns "fetch failed" (502) | Check server URL, API key, and user ID under **Settings > Jellyfin**, that the playlist ID exists, and that the server is reachable from this machine. Jellyfin transcodes to PCM via `ffmpeg`, so the configured ffmpeg path must be valid. |
 
 ## Why this exists
 
