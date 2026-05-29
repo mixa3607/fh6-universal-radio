@@ -536,8 +536,6 @@ struct HttpServer::Impl {
                 sessions.push_back(json{
                     {"id", session.id},
                     {"name", session.name},
-                    {"title", session.title},
-                    {"artist", session.artist},
                     {"is_current", session.is_current},
                     {"is_selected", session.is_selected},
                 });

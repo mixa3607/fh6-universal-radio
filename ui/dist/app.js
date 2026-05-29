@@ -228,14 +228,13 @@ function renderExternalAudioCard() {
   }
 
   const sessionSelect = $("#external-audio-session", card);
-  const sessionSig = `${extMediaSessionId}|${extMediaSessionsAvailable}|${extMediaSessions.map(s => `${s.id}:${s.name}:${s.title}:${s.artist}:${s.is_current}`).join("|")}`;
+  const sessionSig = `${extMediaSessionId}|${extMediaSessionsAvailable}|${extMediaSessions.map(s => `${s.id}:${s.name}:${s.is_current}`).join("|")}`;
   if (sessionSelect.dataset.sig !== sessionSig) {
     sessionSelect.dataset.sig = sessionSig;
     sessionSelect.innerHTML = "";
     sessionSelect.add(new Option("Current Windows media session", "", false, extMediaSessionId === ""));
     for (const s of extMediaSessions) {
-      const now = s.title ? ` — ${s.title}${s.artist ? " / " + s.artist : ""}` : "";
-      const label = `${s.name || s.id}${s.is_current ? " (current)" : ""}${now}`;
+      const label = `${s.name || s.id}${s.is_current ? " (current)" : ""}`;
       sessionSelect.add(new Option(label, s.id, false, extMediaSessionId === s.id));
     }
     if (!extMediaSessionsAvailable) {

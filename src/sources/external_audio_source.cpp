@@ -259,14 +259,14 @@ int32_t read_i24_le(const BYTE* p) noexcept {
  return v;
 }
 
-float sample_to_float(const BYTE* p, WORD bits, bool is_float) noexcept {
+float sample_to_float(const BYTE* p, WORD container_bits, WORD valid_bits, bool is_float) noexcept {
  if (is_float) {
-  if (bits == 32) {
+  if (container_bits == 32) {
    float v;
    std::memcpy(&v, p, sizeof(v));
    return clamp_sample(v);
   }
-  if (bits == 64) {
+  if (container_bits == 64) {
    double v;
    std::memcpy(&v, p, sizeof(v));
    return clamp_sample(static_cast<float>(v));
@@ -274,30 +274,45 @@ float sample_to_float(const BYTE* p, WORD bits, bool is_float) noexcept {
   return 0.0f;
  }
 
- switch (bits) {
- case 8:
-  return (static_cast<int>(*p) - 128) / 128.0f;
+ if (valid_bits == 0 || valid_bits > container_bits) valid_bits = container_bits;
+ if (valid_bits == 0 || valid_bits > 32) return 0.0f;
+
+ if (container_bits == 8) {
+  const int32_t signed_value = static_cast<int32_t>(*p) - 128;
+  return clamp_sample(static_cast<float>(signed_value) / 128.0f);
+ }
+
+ int32_t signed_value = 0;
+ switch (container_bits) {
  case 16: {
   int16_t v;
   std::memcpy(&v, p, sizeof(v));
-  return static_cast<float>(v) / 32768.0f;
+  signed_value = v;
+  break;
  }
  case 24:
-  return static_cast<float>(read_i24_le(p)) / 8388608.0f;
- case 32: {
-  int32_t v;
-  std::memcpy(&v, p, sizeof(v));
-  return static_cast<float>(v) / 2147483648.0f;
- }
+  signed_value = read_i24_le(p);
+  break;
+ case 32:
+  std::memcpy(&signed_value, p, sizeof(signed_value));
+  break;
  default:
   return 0.0f;
  }
+
+ if (valid_bits < container_bits) {
+  signed_value >>= static_cast<int>(container_bits - valid_bits);
+ }
+
+ const double scale = static_cast<double>(int64_t{1} << (valid_bits - 1u));
+ return clamp_sample(static_cast<float>(static_cast<double>(signed_value) / scale));
 }
 
 struct InputFormat {
  uint32_t sample_rate = 0;
  uint16_t channels = 0;
- uint16_t bits = 0;
+ uint16_t container_bits = 0;
+ uint16_t valid_bits = 0;
  uint16_t block_align = 0;
  bool is_float = false;
 };
@@ -305,10 +320,11 @@ struct InputFormat {
 bool parse_input_format(const WAVEFORMATEX& fmt, InputFormat& out, std::string& error) {
  out.sample_rate = fmt.nSamplesPerSec;
  out.channels = fmt.nChannels;
- out.bits = fmt.wBitsPerSample;
+ out.container_bits = fmt.wBitsPerSample;
+ out.valid_bits = fmt.wBitsPerSample;
  out.block_align = fmt.nBlockAlign;
 
- if (out.sample_rate == 0 || out.channels == 0 || out.block_align == 0) {
+ if (out.sample_rate == 0 || out.channels == 0 || out.block_align == 0 || out.container_bits == 0) {
   error = "Invalid WASAPI mix format";
   return false;
  }
@@ -326,8 +342,10 @@ bool parse_input_format(const WAVEFORMATEX& fmt, InputFormat& out, std::string& 
  if (fmt.wFormatTag == WAVE_FORMAT_EXTENSIBLE &&
   fmt.cbSize >= (sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX))) {
   const auto& ext = reinterpret_cast<const WAVEFORMATEXTENSIBLE&>(fmt);
-  out.bits = ext.Format.wBitsPerSample;
+  out.container_bits = ext.Format.wBitsPerSample;
+  out.valid_bits = ext.Samples.wValidBitsPerSample ? ext.Samples.wValidBitsPerSample : out.container_bits;
   out.block_align = ext.Format.nBlockAlign;
+  if (out.valid_bits > out.container_bits) out.valid_bits = out.container_bits;
   if (IsEqualGUID(ext.SubFormat, KSDATAFORMAT_SUBTYPE_IEEE_FLOAT)) {
    out.is_float = true;
    return true;
@@ -370,7 +388,7 @@ struct Resampler {
   }
 
   const bool silent = (flags & AUDCLNT_BUFFERFLAGS_SILENT) != 0;
-  const uint16_t bytes_per_sample = static_cast<uint16_t>((fmt.bits + 7u) / 8u);
+  const uint16_t bytes_per_sample = static_cast<uint16_t>((fmt.container_bits + 7u) / 8u);
 
   for (UINT32 f = 0; f < frame_count; ++f) {
    float l = 0.0f;
@@ -378,11 +396,35 @@ struct Resampler {
 
    if (!silent && data) {
     const BYTE* frame = data + static_cast<std::size_t>(f) * fmt.block_align;
-    l = sample_to_float(frame, fmt.bits, fmt.is_float);
     if (fmt.channels == 1) {
+     l = sample_to_float(frame, fmt.container_bits, fmt.valid_bits, fmt.is_float);
      r = l;
+    } else if (fmt.channels == 2) {
+     l = sample_to_float(frame, fmt.container_bits, fmt.valid_bits, fmt.is_float);
+     r = sample_to_float(frame + bytes_per_sample, fmt.container_bits, fmt.valid_bits, fmt.is_float);
     } else {
-     r = sample_to_float(frame + bytes_per_sample, fmt.bits, fmt.is_float);
+     double lsum = 0.0;
+     double rsum = 0.0;
+     double lw = 0.0;
+     double rw = 0.0;
+     for (uint16_t ch = 0; ch < fmt.channels; ++ch) {
+      const float v = sample_to_float(frame + static_cast<std::size_t>(ch) * bytes_per_sample,
+       fmt.container_bits, fmt.valid_bits, fmt.is_float);
+      if (ch == 0) {
+       lsum += v;
+       lw += 1.0;
+      } else if (ch == 1) {
+       rsum += v;
+       rw += 1.0;
+      } else {
+       lsum += v;
+       rsum += v;
+       lw += 1.0;
+       rw += 1.0;
+      }
+     }
+     l = static_cast<float>(lsum / std::max(1.0, lw));
+     r = static_cast<float>(rsum / std::max(1.0, rw));
     }
    }
 
@@ -798,10 +840,17 @@ void ExternalAudioSource::clear_queue() {
 }
 
 void ExternalAudioSource::capture_loop() noexcept {
- auto set_error = [this](std::string msg) {
-  std::scoped_lock lk{meta_mu_};
-  last_error_ = std::move(msg);
-  log::warn("[external_audio] {}", last_error_);
+ bool had_error = false;
+ auto set_error = [this, &had_error](std::string msg) {
+  had_error = true;
+  {
+   std::scoped_lock lk{meta_mu_};
+   last_error_ = std::move(msg);
+   log::warn("[external_audio] {}", last_error_);
+  }
+  if (!stop_requested_.load(std::memory_order_acquire)) {
+   state_.store(PlaybackState::stopped, std::memory_order_release);
+  }
  };
 
  HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
@@ -887,14 +936,14 @@ void ExternalAudioSource::capture_loop() noexcept {
   return;
  }
 
- log::info("[external_audio] capturing {} ch, {} Hz, {}-bit {} from '{}'",
-  input.channels, input.sample_rate, input.bits, input.is_float ? "float" : "pcm",
-  current_track().artist);
+ log::info("[external_audio] capturing {} ch, {} Hz, {}-bit container / {}-bit valid {} from '{}'",
+  input.channels, input.sample_rate, input.container_bits, input.valid_bits,
+  input.is_float ? "float" : "pcm", current_track().artist);
 
  Resampler resampler;
  resampler.fmt = input;
 
- while (!stop_requested_.load(std::memory_order_acquire)) {
+ while (!had_error && !stop_requested_.load(std::memory_order_acquire)) {
   UINT32 next_packet_frames = 0;
   hr = capture->GetNextPacketSize(&next_packet_frames);
   if (FAILED(hr)) {
@@ -907,7 +956,7 @@ void ExternalAudioSource::capture_loop() noexcept {
    continue;
   }
 
-  while (next_packet_frames > 0 && !stop_requested_.load(std::memory_order_acquire)) {
+  while (next_packet_frames > 0 && !had_error && !stop_requested_.load(std::memory_order_acquire)) {
    BYTE* data = nullptr;
    UINT32 frames = 0;
    DWORD flags = 0;

@@ -105,10 +105,6 @@ TrackInfo track_from_session(media::GlobalSystemMediaTransportControlsSession co
         info.position_ms = fallback_position_ms;
     }
 
-    if (info.position_ms == 0 && fallback_position_ms != 0) {
-        info.position_ms = fallback_position_ms;
-    }
-
     if (info.title.empty()) info.title = "External Audio";
     if (info.artist.empty()) info.artist = display_name(s(session.SourceAppUserModelId()));
     return info;
@@ -145,13 +141,6 @@ enumerate_external_audio_media_sessions(std::string_view selected_id) {
             item.name = display_name(item.id);
             item.is_current = !current_id.empty() && item.id == current_id;
             item.is_selected = !selected_id.empty() && item.id == selected_id;
-
-            try {
-                const auto props = session.TryGetMediaPropertiesAsync().get();
-                item.title = s(props.Title());
-                item.artist = s(props.Artist());
-                if (item.artist.empty()) item.artist = s(props.AlbumArtist());
-            } catch (...) {}
 
             if (!item.id.empty()) out.push_back(std::move(item));
         }

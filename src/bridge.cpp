@@ -181,6 +181,9 @@ void run_bridge(HMODULE self) noexcept {
             jf->set_ffmpeg_path(c.general.ffmpeg_path);
             jf->set_config(c.jellyfin);
         }
+        if (auto* ext = dynamic_cast<sources::ExternalAudioSource*>(mgr.find("external_audio"))) {
+            ext->reload_from_config();
+        }
 
         for (auto* s : mgr.sources_snapshot()) s->set_playback_options(c.playback);
         if (ctrl_ptr) ctrl_ptr->push_playback_options(c.playback);
