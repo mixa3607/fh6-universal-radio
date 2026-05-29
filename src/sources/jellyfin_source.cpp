@@ -50,9 +50,11 @@ bool config_complete(const JellyfinConfig& c) noexcept {
 // Fields that determine which playlist gets fetched. `shuffle` deliberately
 // omitted -- it doesn't require a re-query.
 bool same_query_target(const JellyfinConfig& a, const JellyfinConfig& b) noexcept {
-    return a.server_url == b.server_url && a.api_key == b.api_key &&
-           a.user_id    == b.user_id    && a.default_playlist == b.default_playlist &&
-           a.use_favorites == b.use_favorites;
+    if (a.server_url != b.server_url || a.api_key != b.api_key ||
+        a.user_id != b.user_id || a.use_favorites != b.use_favorites) return false;
+    // default_playlist is irrelevant when both sides fetch favorites.
+    if (a.use_favorites && b.use_favorites) return true;
+    return a.default_playlist == b.default_playlist;
 }
 
 std::optional<std::string> http_get(const JellyfinConfig& cfg, const std::string& path) {
@@ -324,6 +326,7 @@ bool JellyfinSource::cast(std::string playlist_id) {
         snap = cfg_;
     }
     snap.default_playlist = playlist_id;
+    snap.use_favorites    = false;   // cast targets a specific playlist
     if (!config_complete(snap)) return false;
 
     std::optional<std::vector<JellyfinTrack>> tracks;
