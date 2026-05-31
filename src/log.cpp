@@ -3,7 +3,6 @@
 #include <chrono>
 #include <cstdio>
 #include <mutex>
-#include <string>
 
 namespace fh6::log {
 
