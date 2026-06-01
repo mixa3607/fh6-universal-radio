@@ -42,17 +42,17 @@ if [ ! -f "$root/third_party/nlohmann/nlohmann/json.hpp" ]; then
     "$root/scripts/get-deps.sh"
 fi
 
-GIT_REF=${GIT_REF:-$(git tag --points-at HEAD)}
-GIT_REF=${GIT_REF:-$(git rev-parse --short HEAD)}
+GIT_REF=${GIT_REF:-$(git tag --points-at HEAD || true)}
+GIT_REF=${GIT_REF:-$(git rev-parse --short HEAD || true)}
 GIT_REF=${GIT_REF:-unknown}
 
 printf '\033[36m-> cmake configure\033[0m\n'
 cmake -S "$root" -B "$build" \
       -DCMAKE_TOOLCHAIN_FILE="$root/cmake/mingw-w64-x86_64.cmake" \
       -DCMAKE_BUILD_TYPE=Release \
-      -DURADIO_VERSION=$GIT_REF
+      -DURADIO_VERSION="$GIT_REF"
 
-printf "\033[36m-> cmake build (Release). Version: $GIT_REF\033[0m\n"
+printf '\033[36m-> cmake build (Release). Version: %s\033[0m\n' "$GIT_REF"
 cmake --build "$build" -j "${JOBS:-$(nproc)}"
 
 rm -rf "$dist"
